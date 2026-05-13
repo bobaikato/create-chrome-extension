@@ -6,17 +6,9 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      ota_ref:
-        description: Ota git ref to build from source
-        required: false
-        default: feat/scoped-env-requirements
 
 permissions:
   contents: read
-
-env:
-  OTA_REF_DEFAULT: feat/scoped-env-requirements
 
 jobs:
   matrix:
@@ -38,22 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Check out ota source
-        uses: actions/checkout@v5
-        with:
-          repository: ota-run/ota
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ota_ref || env.OTA_REF_DEFAULT }}
-          path: .ota-ci/ota-source
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build ota from source
-        run: cargo build --release --locked
-        working-directory: .ota-ci/ota-source
-
-      - name: Add ota to PATH
-        run: echo "${GITHUB_WORKSPACE}/.ota-ci/ota-source/target/release" >> "$GITHUB_PATH"
+      - name: Setup ota
+        uses: ota-run/setup@v1
 
       - name: Show ota version
         run: ota --version
