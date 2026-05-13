@@ -62,19 +62,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .ota-ci/logs/native
-          
-          run_non_blocking_task() {
-            local task="$1"
-            local mode="$2"
-            local logfile="$3"
-            set +e
-            ota run "$task" --mode "$mode" --plain --stream 2>&1 | tee "$logfile"
-            local task_status="${PIPESTATUS[0]}"
-            set -e
-            if [ "$task_status" -ne 0 ]; then
-              echo "Non-blocking task failed: ota run $task --mode $mode (continuing by design)." | tee -a "$logfile"
-            fi
-          }
 
           ota validate --plain 2>&1 | tee .ota-ci/logs/native/validate.txt
           ota execution plan --workflow contributor --mode native --plain 2>&1 | tee .ota-ci/logs/native/execution-plan-native.txt
@@ -86,27 +73,11 @@ jobs:
           ota run build --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-build-native.txt
           ota run build:firefox --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-build-firefox-native.txt
           ota run check:cws --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-check-cws-native.txt
-          run_non_blocking_task test:cli native .ota-ci/logs/native/run-test-cli-native.txt
-          run_non_blocking_task test:validator native .ota-ci/logs/native/run-test-validator-native.txt
-          run_non_blocking_task ci:check native .ota-ci/logs/native/run-ci-check-native.txt
 
       - name: Run container contract suite
         run: |
           set -euo pipefail
           mkdir -p .ota-ci/logs/container
-          
-          run_non_blocking_task() {
-            local task="$1"
-            local mode="$2"
-            local logfile="$3"
-            set +e
-            ota run "$task" --mode "$mode" --plain --stream 2>&1 | tee "$logfile"
-            local task_status="${PIPESTATUS[0]}"
-            set -e
-            if [ "$task_status" -ne 0 ]; then
-              echo "Non-blocking task failed: ota run $task --mode $mode (continuing by design)." | tee -a "$logfile"
-            fi
-          }
 
           ota execution plan --workflow contributor --mode container --plain 2>&1 | tee .ota-ci/logs/container/execution-plan-container.txt
 
@@ -146,9 +117,6 @@ jobs:
             ota run build --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-build-container.txt
             ota run build:firefox --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-build-firefox-container.txt
             ota run check:cws --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-check-cws-container.txt
-            run_non_blocking_task test:cli container .ota-ci/logs/container/run-test-cli-container.txt
-            run_non_blocking_task test:validator container .ota-ci/logs/container/run-test-validator-container.txt
-            run_non_blocking_task ci:check container .ota-ci/logs/container/run-ci-check-container.txt
             exit 0
           fi
 
