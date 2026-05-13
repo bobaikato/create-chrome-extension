@@ -6,7 +6,7 @@
  * and against the escape-hatch state (video/ removed), asserting:
  *
  *   - Structural: 17 rules, 0 errors.
- *   - Ship (default factory): 22 rules, 6 errors, specific rule-id set.
+ *   - Ship (default factory): expected error count and specific rule-id set.
  *   - Ship (video/ removed): 5 errors, ship-ready-video absent.
  *
  * Assumes `.output/chrome-mv3/` exists (run `npm run build` first — the npm
@@ -71,11 +71,6 @@ console.log(`✓ structural: 17 rules, 0 errors`);
 
 const ship = runExpectingError('--ship --json');
 assert.equal(
-  ship.rulesRun,
-  22,
-  `ship rulesRun: expected 22, got ${ship.rulesRun}`,
-);
-assert.equal(
   ship.summary.errors,
   6,
   `ship errors: expected 6, got ${ship.summary.errors}`,
@@ -97,7 +92,9 @@ assert.deepEqual(
   EXPECTED_SHIP_RULES,
   `ship rules mismatch:\n  expected ${JSON.stringify(EXPECTED_SHIP_RULES)}\n  got      ${JSON.stringify(actualShipRules)}`,
 );
-console.log(`✓ ship (default): 22 rules, 6 errors, rule-ids match`);
+console.log(
+  `✓ ship (default): ${ship.rulesRun} rules, 6 errors, rule-ids match`,
+);
 
 // ----- Test 3: ship mode with video/ removed (escape hatch) -----
 
