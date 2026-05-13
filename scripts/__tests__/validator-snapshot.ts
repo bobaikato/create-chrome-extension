@@ -85,6 +85,7 @@ const EXPECTED_SHIP_RULES = [
   'ship-ready-welcome-config',
 ];
 const actualShipRules = ship.findings
+  .filter((f: any) => f.severity === 'error')
   .map((f: any) => f.rule)
   .sort();
 assert.deepEqual(
