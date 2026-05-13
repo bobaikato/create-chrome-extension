@@ -5,7 +5,7 @@
  * the current factory state (post-build) in both structural and ship modes,
  * and against the escape-hatch state (video/ removed), asserting:
  *
- *   - Structural: 16 rules, 0 errors.
+ *   - Structural: 17 rules, 0 errors.
  *   - Ship (default factory): 22 rules, 6 errors, specific rule-id set.
  *   - Ship (video/ removed): 5 errors, ship-ready-video absent.
  *
@@ -52,8 +52,8 @@ function runExpectingError(args: string): any {
 const structural = runExpectingError('--json');
 assert.equal(
   structural.rulesRun,
-  16,
-  `structural rulesRun: expected 16, got ${structural.rulesRun}`,
+  17,
+  `structural rulesRun: expected 17, got ${structural.rulesRun}`,
 );
 assert.equal(
   structural.summary.errors,
@@ -65,7 +65,7 @@ assert.equal(
   'structural',
   `structural mode: expected "structural", got "${structural.mode}"`,
 );
-console.log(`✓ structural: 16 rules, 0 errors`);
+console.log(`✓ structural: 17 rules, 0 errors`);
 
 // ----- Test 2: ship mode (default factory) has expected 6 errors -----
 
