@@ -361,20 +361,105 @@ tasks:
       - install
     safe_for_agent: false
 
-  ci:check:
+  ci:compile:
     context: host
-    description: Deterministic CI validation chain
-    notes: |
-      Mirrors CI expectations: compile, Chrome/Firefox builds, helper validation, and both
-      CWS validation gates.
+    description: Internal CI compile stage
     category: test
-    run: npm run compile && npm run build && npm run build:firefox && npm run test:cli && npm run test:validator && npm run check:cws && npm run check:cws:ship
+    run: npm run compile
     requirements:
       checks:
         - node-toolchain-ready
         - node-modules-installed
     depends_on:
       - install
+    internal: true
+    safe_for_agent: true
+
+  ci:build:
+    context: host
+    description: Internal CI Chrome build stage
+    category: test
+    run: npm run build
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:compile
+    internal: true
+    safe_for_agent: true
+
+  ci:build:firefox:
+    context: host
+    description: Internal CI Firefox build stage
+    category: test
+    run: npm run build:firefox
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:build
+    internal: true
+    safe_for_agent: true
+
+  ci:test:cli:
+    context: host
+    description: Internal CI CLI test stage
+    category: test
+    run: npm run test:cli
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:build:firefox
+    internal: true
+    safe_for_agent: true
+
+  ci:test:validator:
+    context: host
+    description: Internal CI validator test stage
+    category: test
+    run: npm run test:validator
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:test:cli
+    internal: true
+    safe_for_agent: true
+
+  ci:check:cws:
+    context: host
+    description: Internal CI CWS structural validation stage
+    category: test
+    run: npm run check:cws
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:test:validator
+    internal: true
+    safe_for_agent: true
+
+  ci:check:
+    context: host
+    description: Deterministic CI validation chain
+    notes: |
+      Public CI entrypoint.
+      Internal `ci:*` stages own compile/build/test ordering via `depends_on`;
+      keep this task as the stable external contract surface.
+    category: test
+    run: npm run check:cws:ship
+    requirements:
+      checks:
+        - node-toolchain-ready
+        - node-modules-installed
+    depends_on:
+      - ci:check:cws
     safe_for_agent: true
 
 workflows:
