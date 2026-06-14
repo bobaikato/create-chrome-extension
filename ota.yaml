@@ -319,19 +319,6 @@ tasks:
         - node-modules-installed
     safe_for_agent: false
 
-  setup:secrets:local:
-    context: host
-    description: Materialize local CWS secrets template when missing
-    notes: |
-      Creates `.secrets.local.json` from the checked-in example so ship workflows have
-      an explicit local credentials file path before interactive OAuth/setup work.
-    category: setup
-    action:
-      kind: copy_if_missing
-      from: .secrets.local.json.example
-      to: .secrets.local.json
-    safe_for_agent: false
-
   version-sync:
     context: host
     description: Sync extension version against Chrome Web Store listing
@@ -564,7 +551,10 @@ workflows:
       Release workflow for prepared artifacts. Keep this manual and operator-driven because
       it can push external store state.
     prepare:
-      task: setup:secrets:local
+      action:
+        kind: copy_if_missing
+        from: .secrets.local.json.example
+        to: .secrets.local.json
     setup:
       task: ship:prepare
     run:
