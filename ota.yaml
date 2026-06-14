@@ -639,9 +639,9 @@ agent:
     - package-lock.json
   bootstrap:
     ota:
-      note: This pressure contract depends on Ota `1.6.20` surfaces (`tasks.<name>.prepare`), so bootstrap stays pinned to the released `v1.6.20` line.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.20 sh
-      powershell: $env:OTA_VERSION='v1.6.20'; irm https://dist.ota.run/install.ps1 | iex
+      note: This pressure contract depends on released Ota task-preparation surfaces, so bootstrap stays pinned to the current released `v1.6.21` line.
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.21 sh
+      powershell: $env:OTA_VERSION='v1.6.21'; irm https://dist.ota.run/install.ps1 | iex
   notes: |
     This contract models the real project entry points used by contributors.
     `npm ci` is the canonical bootstrap path, and core workflows are `local`,
