@@ -640,8 +640,8 @@ agent:
   bootstrap:
     ota:
       note: This pressure contract depends on released Ota task-preparation surfaces, so bootstrap stays pinned to the current released `v1.6.21` line.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.21 sh
-      powershell: $env:OTA_VERSION='v1.6.21'; irm https://dist.ota.run/install.ps1 | iex
+      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_GIT_REV=08c270351c9870c82a39899161388bb250ad23c4 sh -s -- --from-git
+      powershell: $env:OTA_GIT_REV='08c270351c9870c82a39899161388bb250ad23c4'; & ([scriptblock]::Create((irm https://dist.ota.run/install.ps1))) -FromGit
   notes: |
     This contract models the real project entry points used by contributors.
     `npm ci` is the canonical bootstrap path, and core workflows are `local`,
