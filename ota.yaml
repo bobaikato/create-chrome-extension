@@ -103,7 +103,11 @@ tasks:
     notes: |
       Use this before any build or publish step to catch typing breaks without mutating artifacts.
     category: test
-    run: npm run compile
+    command:
+      exe: npm
+      args:
+        - run
+        - compile
     requirements:
       checks:
         - node-toolchain-ready
@@ -152,7 +156,11 @@ tasks:
       Build is intentionally container-bound (`app`) so generated artifacts follow the same execution
       environment as containerized local development.
     category: build
-    run: npm run build
+    command:
+      exe: npm
+      args:
+        - run
+        - build
     requirements:
       checks:
         - node-toolchain-ready
@@ -168,7 +176,11 @@ tasks:
       Use when preparing the Firefox listing/review path or parity verification before zip.
       Runs in `app` to keep Firefox artifact builds consistent with containerized build defaults.
     category: build
-    run: npm run build:firefox
+    command:
+      exe: npm
+      args:
+        - run
+        - build:firefox
     requirements:
       checks:
         - node-toolchain-ready
@@ -183,7 +195,11 @@ tasks:
     notes: |
       Deterministic packaging step; run once build artifacts exist and checks have passed.
     category: package
-    run: npm run zip
+    command:
+      exe: npm
+      args:
+        - run
+        - zip
     requirements:
       checks:
         - node-toolchain-ready
@@ -198,7 +214,11 @@ tasks:
     notes: |
       Firefox packaging artifact for store submission after Firefox build completion.
     category: package
-    run: npm run zip:firefox
+    command:
+      exe: npm
+      args:
+        - run
+        - zip:firefox
     requirements:
       checks:
         - node-toolchain-ready
@@ -213,7 +233,11 @@ tasks:
     notes: |
       Read-only validation gate for manifest and static structure health before publish.
     category: test
-    run: npm run check:cws
+    command:
+      exe: npm
+      args:
+        - run
+        - check:cws
     requirements:
       checks:
         - node-toolchain-ready
@@ -228,7 +252,11 @@ tasks:
     notes: |
       Final pre-publish validation gate for publishing constraints.
     category: test
-    run: npm run check:cws:ship
+    command:
+      exe: npm
+      args:
+        - run
+        - check:cws:ship
     requirements:
       checks:
         - node-toolchain-ready
@@ -243,7 +271,11 @@ tasks:
     notes: |
       Quick regression signal used to keep helper package behavior stable.
     category: test
-    run: npm run test:cli
+    command:
+      exe: npm
+      args:
+        - run
+        - test:cli
     requirements:
       checks:
         - node-toolchain-ready
@@ -258,7 +290,11 @@ tasks:
     notes: |
       Snapshot regression checks for validator output across known extension states.
     category: test
-    run: npm run test:validator
+    command:
+      exe: npm
+      args:
+        - run
+        - test:validator
     requirements:
       checks:
         - node-toolchain-ready
@@ -271,7 +307,11 @@ tasks:
     context: host
     description: Render Chrome Web Store screenshots
     category: test
-    run: npm run screenshots
+    command:
+      exe: npm
+      args:
+        - run
+        - screenshots
     requirements:
       checks:
         - node-toolchain-ready
@@ -286,7 +326,11 @@ tasks:
     notes: |
       Interactive publishing prerequisite. Writes project-scoped credentials and requires manual review.
     category: setup
-    run: npm run setup:cws
+    command:
+      exe: npm
+      args:
+        - run
+        - setup:cws
     requirements:
       checks:
         - node-toolchain-ready
@@ -299,7 +343,11 @@ tasks:
     notes: |
       Generates policy content from declared extension permissions for release prep.
     category: setup
-    run: npm run setup:privacy
+    command:
+      exe: npm
+      args:
+        - run
+        - setup:privacy
     requirements:
       checks:
         - node-toolchain-ready
@@ -312,7 +360,11 @@ tasks:
     notes: |
       Creates local proxy endpoints for auth-heavy workflows.
     category: setup
-    run: npm run setup:proxy
+    command:
+      exe: npm
+      args:
+        - run
+        - setup:proxy
     requirements:
       checks:
         - node-toolchain-ready
@@ -325,7 +377,11 @@ tasks:
     notes: |
       Keeps listing metadata aligned with local package extension version.
     category: prepublish
-    run: npm run version-sync
+    command:
+      exe: npm
+      args:
+        - run
+        - version-sync
     requirements:
       checks:
         - node-toolchain-ready
@@ -355,7 +411,10 @@ tasks:
       Uses the latest prepared zip in `.output/` and submits through the dedicated
       publish script after prepare checks are complete.
     category: publish
-    run: node scripts/publish-cws.ts
+    command:
+      exe: node
+      args:
+        - scripts/publish-cws.ts
     requirements:
       checks:
         - node-toolchain-ready
@@ -372,7 +431,11 @@ tasks:
       Kept for compatibility. Prefer `ship:prepare` + `ship:publish` for explicit phase
       and audit-friendly behavior.
     category: publish
-    run: npm run ship
+    command:
+      exe: npm
+      args:
+        - run
+        - ship
     requirements:
       checks:
         - node-toolchain-ready
@@ -385,7 +448,11 @@ tasks:
     context: host
     description: Internal CI compile stage
     category: test
-    run: npm run compile
+    command:
+      exe: npm
+      args:
+        - run
+        - compile
     requirements:
       checks:
         - node-toolchain-ready
@@ -399,7 +466,11 @@ tasks:
     context: host
     description: Internal CI Chrome build stage
     category: test
-    run: npm run build
+    command:
+      exe: npm
+      args:
+        - run
+        - build
     requirements:
       checks:
         - node-toolchain-ready
@@ -413,7 +484,11 @@ tasks:
     context: host
     description: Internal CI Firefox build stage
     category: test
-    run: npm run build:firefox
+    command:
+      exe: npm
+      args:
+        - run
+        - build:firefox
     requirements:
       checks:
         - node-toolchain-ready
@@ -427,7 +502,11 @@ tasks:
     context: host
     description: Internal CI CLI test stage
     category: test
-    run: npm run test:cli
+    command:
+      exe: npm
+      args:
+        - run
+        - test:cli
     requirements:
       checks:
         - node-toolchain-ready
@@ -441,7 +520,11 @@ tasks:
     context: host
     description: Internal CI validator test stage
     category: test
-    run: npm run test:validator
+    command:
+      exe: npm
+      args:
+        - run
+        - test:validator
     requirements:
       checks:
         - node-toolchain-ready
@@ -455,7 +538,11 @@ tasks:
     context: host
     description: Internal CI CWS structural validation stage
     category: test
-    run: npm run check:cws
+    command:
+      exe: npm
+      args:
+        - run
+        - check:cws
     requirements:
       checks:
         - node-toolchain-ready
@@ -473,7 +560,11 @@ tasks:
       Internal `ci:*` stages own compile/build/test ordering via `depends_on`;
       keep this task as the stable external contract surface.
     category: test
-    run: npm run check:cws:ship
+    command:
+      exe: npm
+      args:
+        - run
+        - check:cws:ship
     requirements:
       checks:
         - node-toolchain-ready
