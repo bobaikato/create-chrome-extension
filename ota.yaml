@@ -123,7 +123,12 @@ tasks:
       This task is intentionally on the `app` container context for parity with local containerized
       extension workflows. Keep `dev` host-bound tasks separate so environment assumptions are explicit.
     category: dev
-    run: npm run dev
+    launch:
+      kind: command
+      exe: npm
+      args:
+        - run
+        - dev
     requirements:
       checks:
         - node-toolchain-ready
@@ -139,7 +144,12 @@ tasks:
       Runs in the `app` container context to keep the cross-browser dev flow aligned with other
       containerized extension execution paths.
     category: dev
-    run: npm run dev:firefox
+    launch:
+      kind: command
+      exe: npm
+      args:
+        - run
+        - dev:firefox
     requirements:
       checks:
         - node-toolchain-ready
