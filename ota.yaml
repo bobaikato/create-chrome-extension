@@ -1,7 +1,7 @@
 version: 1
 metadata:
   ota:
-    minimum_version: "1.6.20"
+    minimum_version: "1.6.23"
 project:
   name: create-chrome-extension
   description: WXT-powered Chrome extension factory with CWS-ready build, validation, and shipping flows
@@ -47,6 +47,26 @@ checks:
     expect: directory
 
 tasks:
+  scaffold:sample:
+    context: host
+    description: Materialize a fresh sample extension repo from the factory template
+    notes: |
+      Pressure/proof lane for factory scaffold ownership. This task clones the current
+      factory repo into a deterministic local sample path, strips inherited Git metadata,
+      and initializes a fresh child repo so Ota owns the same bootstrap shape previously
+      left in README and skill shell glue.
+    category: setup
+    action:
+      kind: ensure_git_template
+      path: .ota-pressure/scaffold-sample
+      source:
+        git: .
+        ref: 69a34fb0c8747b13878e2164487b2ed692be7488
+    effects:
+      writes:
+        - .ota-pressure
+    safe_for_agent: false
+
   install:app:
     context: app
     description: Install Node dependencies in the app container context
@@ -740,9 +760,10 @@ agent:
     - package-lock.json
   bootstrap:
     ota:
-      note: This pressure contract depends on released Ota task-preparation surfaces, so bootstrap stays pinned to the current released `v1.6.21` line.
-      sh: curl -fsSL https://dist.ota.run/install.sh | OTA_VERSION=v1.6.21 sh
-      powershell: $env:OTA_VERSION='v1.6.21'; irm https://dist.ota.run/install.ps1 | iex
+      note: This pressure contract proves unreleased scaffold-materialization surfaces, so bootstrap stays pinned to the exact Ota git revision under test.
+      source:
+        kind: git_rev
+        rev: 691cf50b8d7a24d3c1438004a6c7f325acd7d733
   notes: |
     This contract models the real project entry points used by contributors.
     `npm ci` is the canonical bootstrap path, and core workflows are `local`,

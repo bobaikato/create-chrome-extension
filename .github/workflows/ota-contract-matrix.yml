@@ -6,15 +6,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      ota_repository:
-        description: Ota source repository to build for this matrix run
-        required: false
-        default: bobaikato/ota
-      ota_ref:
-        description: Ota branch, tag, or commit to build for this matrix run
-        required: false
-        default: 1.6.21-implementation
 
 permissions:
   contents: read
@@ -39,11 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install ota from source
-        uses: ota-run/ota/.github/actions/install-ota-from-source@v1.6.19
+      - name: Install ota from contract bootstrap truth
+        uses: ota-run/setup@v1.0.8
         with:
-          repository: ${{ github.event.inputs.ota_repository || 'bobaikato/ota' }}
-          ref: ${{ github.event.inputs.ota_ref || '1.6.21-implementation' }}
+          source: contract
+          contract-path: ota.yaml
 
       - name: Show ota version
         run: ota --version
@@ -54,10 +45,14 @@ jobs:
           mkdir -p .ota-ci/logs/native
 
           ota validate --plain 2>&1 | tee .ota-ci/logs/native/validate.txt
+          ota tasks --use --plain 2>&1 | tee .ota-ci/logs/native/tasks-use.txt
+          ota tasks --safe --use --plain 2>&1 | tee .ota-ci/logs/native/tasks-safe-use.txt
           ota execution plan --workflow contributor --mode native --plain 2>&1 | tee .ota-ci/logs/native/execution-plan-native.txt
           ota up --workflow contributor --mode native --plain 2>&1 | tee .ota-ci/logs/native/up-contributor-native.txt
           ota doctor --workflow contributor --mode native --plain 2>&1 | tee .ota-ci/logs/native/doctor-native.txt
 
+          ota run scaffold:sample --mode native --dry-run --json 2>&1 | tee .ota-ci/logs/native/run-scaffold-sample-dry-run-native.json
+          ota run scaffold:sample --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-scaffold-sample-native.txt
           ota run install --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-install-native.txt
           ota run compile --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-compile-native.txt
           ota run build --mode native --plain --stream 2>&1 | tee .ota-ci/logs/native/run-build-native.txt
