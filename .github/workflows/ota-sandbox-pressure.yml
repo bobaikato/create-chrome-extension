@@ -5,6 +5,9 @@
 name: Ota V11.21 Sandbox Pressure
 
 on:
+  push:
+    branches:
+      - bobai/integrate-ota
   workflow_dispatch:
 
 permissions:
