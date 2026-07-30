@@ -60,6 +60,7 @@ proxy-authed/.wrangler
 .factory/
 
 # Ota local runtime artifacts
-.ota/state/*
-.ota/receipts/*
-.ota/proof/*
+.ota/state/
+.ota/contracts/
+.ota/receipts/
+.ota/proof/

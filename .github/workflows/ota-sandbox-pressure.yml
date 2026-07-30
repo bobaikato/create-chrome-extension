@@ -1,0 +1,69 @@
+# Copyright (C) 2026 — 2026, Ota. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0. See LICENSE for the full license text.
+
+name: Ota V11.21 Sandbox Pressure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox:
+    name: Generated output and enforced network denial
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Ota from contract truth
+        uses: ota-run/setup@v1.0.8
+        with:
+          source: contract
+          contract-path: ota.yaml
+
+      - name: Prove the selected sandbox lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ota-ci/sandbox
+
+          ota validate --plain
+          ota doctor --workflow sandbox --mode container --plain
+          ota tasks --use --plain
+          ota tasks --safe --use --plain
+
+          ota run sandbox:banner-report --agent --mode container --sandbox-target oci_local --dry-run --json \
+            > .ota-ci/sandbox/run-dry-run.json
+          ota up --workflow sandbox --agent --mode container --sandbox-target oci_local --dry-run --json \
+            > .ota-ci/sandbox/up-dry-run.json
+
+          ota run sandbox:banner-report --agent --mode container --sandbox-target oci_local --receipt --plain \
+            | tee .ota-ci/sandbox/run.txt
+          run_archive="$(find .ota/receipts -type f -name '*.json' -printf '%T@ %p\n' \
+            | sort -n | tail -1 | cut -d' ' -f2-)"
+          cp "$run_archive" .ota-ci/sandbox/run-archive.json
+          ota up --workflow sandbox --agent --mode container --sandbox-target oci_local --receipt --json \
+            > .ota-ci/sandbox/up.json
+
+          jq -e '.sandbox_admission.decision == "admitted"' .ota-ci/sandbox/run-dry-run.json
+          jq -e '.sandbox_admission.decision == "admitted"' .ota-ci/sandbox/up-dry-run.json
+          jq -e '.receipt.witnessed_observations.sandbox_application.status == "enforced_through_completion"' \
+            .ota-ci/sandbox/run-archive.json
+          jq -e '.ok == true and .receipt.witnessed_observations.sandbox_application.status == "enforced_through_completion"' \
+            .ota-ci/sandbox/up.json
+          test -s .ota-pressure/sandbox/dev-banner.txt
+          find .ota/receipts -type f -name '*.json' -print -quit | grep -q .
+
+      - name: Upload bounded sandbox evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ota-v11-21-sandbox-create-chrome-extension
+          path: |
+            .ota-ci/sandbox
+            .ota/receipts
+            .ota-pressure/sandbox/dev-banner.txt

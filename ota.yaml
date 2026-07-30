@@ -17,6 +17,12 @@ execution:
       lifecycle: persistent
       container:
         image: node:20-bookworm
+    sandbox:container:
+      backend: container
+      lifecycle: ephemeral
+      container:
+        image: node:20-bookworm
+        platform: linux/amd64
 
 toolchains:
   node:
@@ -47,6 +53,34 @@ checks:
     expect: directory
 
 tasks:
+  sandbox:banner-report:
+    context: sandbox:container
+    description: Generate the repository's development banner as bounded OCI sandbox evidence
+    notes: |
+      This pressure-only lane runs the repository's existing banner generator and writes its
+      output into one declared carve-out. It proves only selected-lane filesystem, network,
+      provider-application, and cleanup truth; it is not the extension build or contributor suite.
+    category: verify
+    command:
+      exe: bash
+      args:
+        - -lc
+        - node scripts/print-dev-banner.mjs > .ota-pressure/sandbox/dev-banner.txt
+    runtime_boundary:
+      filesystem:
+        repo_root_mode: read_only
+        writable_paths:
+          - .ota-pressure/sandbox
+        protected_paths:
+          - ota.yaml
+          - .github/workflows
+      network:
+        default: deny
+    effects:
+      writes:
+        - .ota-pressure/sandbox
+    safe_for_agent: true
+
   scaffold:sample:
     context: host
     description: Materialize a fresh sample extension repo from the factory template
@@ -605,6 +639,14 @@ tasks:
 
 workflows:
   default: contributor
+  sandbox:
+    intent: validation
+    description: Prove the bounded provider-enforced development-banner artifact lane
+    run:
+      task: sandbox:banner-report
+    notes: |
+      This is V11.21 pressure evidence only. It does not replace or broaden the contributor
+      workflow, extension build, browser validation, or publication proof.
   contributor:
     intent: validation
     description: Non-interactive contributor verification path
@@ -721,6 +763,7 @@ agent:
   entrypoint: install
   default_task: compile
   safe_tasks:
+    - sandbox:banner-report
     - install
     - install:app
     - compile
@@ -734,6 +777,7 @@ agent:
     - compile
     - build
   writable_paths:
+    - .ota-pressure/sandbox
     - entrypoints
     - entrypoints/background.ts
     - entrypoints/content.ts
@@ -758,12 +802,13 @@ agent:
   protected_paths:
     - ota.yaml
     - package-lock.json
+    - .github
   bootstrap:
     ota:
       note: This pressure contract proves unreleased scaffold-materialization surfaces, so bootstrap stays pinned to the exact Ota git revision under test.
       source:
         kind: git_rev
-        rev: 691cf50b8d7a24d3c1438004a6c7f325acd7d733
+        rev: d796f28e5556c0f1315052e8782ed774e9156922
   notes: |
     This contract models the real project entry points used by contributors.
     `npm ci` is the canonical bootstrap path, and core workflows are `local`,
