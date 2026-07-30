@@ -58,14 +58,17 @@ tasks:
     description: Generate the repository's development banner as bounded OCI sandbox evidence
     notes: |
       This pressure-only lane runs the repository's existing banner generator and writes its
-      output into one declared carve-out. It proves only selected-lane filesystem, network,
+      output into one declared carve-out after confirming that the same boundary refuses a write
+      to protected `ota.yaml`. It proves only selected-lane filesystem, network,
       provider-application, and cleanup truth; it is not the extension build or contributor suite.
     category: verify
     command:
       exe: bash
       args:
         - -lc
-        - node scripts/print-dev-banner.mjs > .ota-pressure/sandbox/dev-banner.txt
+        - >-
+          if printf forbidden > ota.yaml 2>/dev/null; then exit 9; fi;
+          node scripts/print-dev-banner.mjs > .ota-pressure/sandbox/dev-banner.txt
     runtime_boundary:
       filesystem:
         repo_root_mode: read_only

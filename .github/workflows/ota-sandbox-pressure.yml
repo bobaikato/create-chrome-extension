@@ -38,6 +38,17 @@ jobs:
           ota doctor --workflow sandbox --mode container --plain
           ota tasks --use --plain
           ota tasks --safe --use --plain
+          ota tasks --json > .ota-ci/sandbox/tasks.json
+          ota workflows --json > .ota-ci/sandbox/workflows.json
+
+          jq -e '.capability_profile.callable_tasks[]
+            | select(.name == "sandbox:banner-report")
+            | .sandbox_policy.filesystem.repo_root_mode == "read_only"
+              and .sandbox_policy.network.default == "deny"' .ota-ci/sandbox/tasks.json
+          jq -e '.capability_profile.callable_workflows[]
+            | select(.name == "sandbox")
+            | .sandbox_policy.filesystem.protected_paths | index("ota.yaml") != null' \
+            .ota-ci/sandbox/workflows.json
 
           ota run sandbox:banner-report --agent --mode container --sandbox-target oci_local --dry-run --json \
             > .ota-ci/sandbox/run-dry-run.json
@@ -59,7 +70,11 @@ jobs:
           jq -e '.ok == true and .receipt.witnessed_observations.sandbox_application.status == "enforced_through_completion"' \
             .ota-ci/sandbox/up.json
           test -s .ota-pressure/sandbox/dev-banner.txt
-          find .ota/receipts -type f -name '*.json' -print -quit | grep -q .
+          grep -q '^version:' ota.yaml
+
+          ota receipt --history --json > .ota-ci/sandbox/receipt-history.json
+          jq -e '.summary.archive_count >= 2 and .summary.invalid_archive_count == 0' \
+            .ota-ci/sandbox/receipt-history.json
 
       - name: Upload bounded sandbox evidence
         if: always()
