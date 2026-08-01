@@ -6,6 +6,9 @@
 name: Ota Crossing Authority Refusal Pressure
 
 on:
+  push:
+    branches:
+      - bobai/v11-7-crossing-refusal-pressure
   workflow_dispatch:
 
 permissions:
