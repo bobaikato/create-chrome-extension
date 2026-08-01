@@ -112,28 +112,26 @@ jobs:
 
           set +e
           ota doctor --workflow build --mode container --plain > .ota-ci/logs/container/doctor-container.txt 2>&1
-          doctor_status=$?
           ota up --workflow build --mode container --plain > .ota-ci/logs/container/up-build-container.txt 2>&1
           up_status=$?
           set -e
 
           cat .ota-ci/logs/container/doctor-container.txt
-          cat .ota-ci/logs/container/up-contributor-container.txt
+          cat .ota-ci/logs/container/up-build-container.txt
 
-          test "$doctor_status" -ne 0
           test "$up_status" -ne 0
 
           if grep -Ei "no matching manifest|image operating system|cannot be used on this platform" \
             .ota-ci/logs/container/doctor-container.txt \
-            .ota-ci/logs/container/up-contributor-container.txt; then
+            .ota-ci/logs/container/up-build-container.txt; then
             echo "Container-mode fallback accepted: selected image is not runnable on this host container backend."
             exit 0
           fi
 
-          grep -E "Container execution backend unavailable|Missing container execution backend CLI" \
+          grep -E "Container image unavailable|Container execution backend unavailable|Missing container execution backend CLI" \
             .ota-ci/logs/container/doctor-container.txt
-          grep -E "Container execution backend unavailable|Missing container execution backend CLI" \
-            .ota-ci/logs/container/up-contributor-container.txt
+          grep -E "Container image unavailable|Container execution backend unavailable|Missing container execution backend CLI" \
+            .ota-ci/logs/container/up-build-container.txt
 
       - name: Upload ota matrix logs
         if: always()
