@@ -68,7 +68,8 @@ jobs:
           set -euo pipefail
           mkdir -p .ota-ci/logs/container
 
-          ota execution plan --workflow contributor --mode container --plain 2>&1 | tee .ota-ci/logs/container/execution-plan-container.txt
+          # `contributor` is intentionally native. Exercise the separate container-owned build lane.
+          ota execution plan --workflow build --mode container --plain 2>&1 | tee .ota-ci/logs/container/execution-plan-container.txt
 
           backend=""
           if docker info >/dev/null 2>&1; then
@@ -99,22 +100,20 @@ jobs:
           fi
 
           if [ -n "$backend" ]; then
-            ota up --workflow contributor --mode container --plain 2>&1 | tee .ota-ci/logs/container/up-contributor-container.txt
-            ota doctor --workflow contributor --mode container --plain 2>&1 | tee .ota-ci/logs/container/doctor-container.txt
-            ota run install --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-install-container.txt
-            ota run compile --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-compile-container.txt
+            ota up --workflow build --mode container --plain 2>&1 | tee .ota-ci/logs/container/up-build-container.txt
+            ota doctor --workflow build --mode container --plain 2>&1 | tee .ota-ci/logs/container/doctor-container.txt
+            ota run install:app --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-install-app-container.txt
             ota run build --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-build-container.txt
             ota run build:firefox --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-build-firefox-container.txt
-            ota run check:cws --mode container --plain --stream 2>&1 | tee .ota-ci/logs/container/run-check-cws-container.txt
             exit 0
           fi
 
           echo "No runnable container path on ${RUNNER_OS}; asserting honest container-mode failure." | tee -a .ota-ci/logs/container/backend.txt
 
           set +e
-          ota doctor --workflow contributor --mode container --plain > .ota-ci/logs/container/doctor-container.txt 2>&1
+          ota doctor --workflow build --mode container --plain > .ota-ci/logs/container/doctor-container.txt 2>&1
           doctor_status=$?
-          ota up --workflow contributor --mode container --plain > .ota-ci/logs/container/up-contributor-container.txt 2>&1
+          ota up --workflow build --mode container --plain > .ota-ci/logs/container/up-build-container.txt 2>&1
           up_status=$?
           set -e
 
