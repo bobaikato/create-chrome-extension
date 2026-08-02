@@ -61,15 +61,40 @@ jobs:
         run: |
           set -euo pipefail
           test "$RUNNER_OS" = Linux
+          test "$(uname -m)" = x86_64
           test "$(id -u)" -ne 0
           if sudo -n true >/dev/null 2>&1; then
             echo "The Ota process can acquire sudo; this runner cannot evidence authority separation." >&2
             exit 1
           fi
+          test -z "${DOCKER_HOST:-}"
+          test ! -S /var/run/docker.sock
           test -f /etc/ota/crossing-authorities.json
           test -r /etc/ota/crossing-authorities.json
           test ! -w /etc/ota/crossing-authorities.json
           test ! -w /etc/ota
+          test -f /var/lib/ota/crossing-authority.json
+          test -r /var/lib/ota/crossing-authority.json
+          test ! -w /var/lib/ota/crossing-authority.json
+          test -f /var/lib/ota/crossing-authority-sequence.json
+          test -r /var/lib/ota/crossing-authority-sequence.json
+          test ! -w /var/lib/ota/crossing-authority-sequence.json
+          test ! -w /var/lib/ota
+          jq -n \
+            --arg os "$RUNNER_OS" \
+            --arg architecture "$(uname -m)" \
+            --argjson uid "$(id -u)" \
+            '{
+              runner_os: $os,
+              architecture: $architecture,
+              runner_uid: $uid,
+              passwordless_sudo: false,
+              docker_host_configured: false,
+              docker_socket_present: false,
+              trust_store_writable: false,
+              bundle_writable: false,
+              sequence_state_writable: false
+            }' > "$RUNNER_TEMP/hardened-runner.json"
 
       - name: Install exact Ota source from pressure contract
         uses: ota-run/setup@493cba84bf7f7c11c9e8e996d832d93a89c62184
@@ -90,9 +115,9 @@ jobs:
         run: |
           set -euo pipefail
           ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
-            > grant-dry-run.json
+            > "$RUNNER_TEMP/grant-dry-run.json"
           jq -e '.ok == true and .execution_started == false and .crossing_grant_admission.decision == "admissible_not_consumed"' \
-            grant-dry-run.json
+            "$RUNNER_TEMP/grant-dry-run.json"
           test ! -e .ota-pressure/scaffold-sample
 
       - name: Prove live grant creates one transaction-bound scaffold receipt
@@ -102,11 +127,27 @@ jobs:
           test ! -e .ota-pressure/scaffold-sample
           ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --receipt
           test -e .ota-pressure/scaffold-sample
-          archive="$(find .ota/receipts -type f -name 'repo-receipt-*.json' | sort | tail -n 1)"
+          archive="./$(find .ota/receipts -type f -name 'repo-receipt-*.json' | sort | tail -n 1)"
           test -n "$archive"
-          jq -e '.receipt.crossing.authority.transaction != null' "$archive"
-          ota receipt --history --file ota-crossing-pressure.yaml --json > receipt-history.json
-          jq -e '.ok == true' receipt-history.json
+          jq -e '
+            .receipt.status == "success" and
+            .receipt.crossing.id == .receipt.crossing.authority.transaction.transaction_id and
+            .receipt.crossing.authority.authority_id == "pressure-fixture-authority" and
+            .receipt.crossing.authority.grant_id == "fixture-live" and
+            .receipt.crossing.authority.authority_separation_posture == "current_process_filesystem_guarded" and
+            .receipt.crossing.authority.transaction.state == "completed" and
+            .receipt.crossing.authority.transaction.authentication_posture == "runner_local_content_addressed" and
+            .receipt.crossing.authority.transaction.receipt_status == "success"
+          ' "$archive"
+          ota receipt --history --file ota-crossing-pressure.yaml --json > "$RUNNER_TEMP/receipt-history.json"
+          jq -e --arg archive "$archive" '
+            .ok == true and
+            .summary.archive_count == 1 and
+            .summary.invalid_archive_count == 0 and
+            (.archives | length) == 1 and
+            (.invalid_archives | length) == 0 and
+            .archives[0].archive_path == $archive
+          ' "$RUNNER_TEMP/receipt-history.json"
 
       - name: Prove invalid grant refuses before scaffold mutation
         if: inputs.scenario != 'live'
@@ -120,21 +161,32 @@ jobs:
             out-of-scope) expected_reason='crossing_grant_out_of_scope' ;;
             *) echo "Unsupported scenario: $SCENARIO" >&2; exit 2 ;;
           esac
+          checkout_manifest() {
+            {
+              find . -path './.git' -prune -o -printf '%y %m %s %p -> %l\n' | LC_ALL=C sort
+              find . -path './.git' -prune -o -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+            }
+          }
+          checkout_manifest > "$RUNNER_TEMP/checkout-before.manifest"
           test ! -e .ota-pressure/scaffold-sample
           if ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
-            > grant-dry-run.json 2>&1; then
+            > "$RUNNER_TEMP/grant-dry-run.json" 2>&1; then
             echo "Expected $SCENARIO dry-run grant refusal." >&2
             exit 1
           fi
           jq -e --arg expected_reason "$expected_reason" \
             '.ok == false and .execution_started == false and .crossing_grant_admission.reason_family == $expected_reason' \
-            grant-dry-run.json
+            "$RUNNER_TEMP/grant-dry-run.json"
+          checkout_manifest > "$RUNNER_TEMP/checkout-after-dry-run.manifest"
+          cmp -s "$RUNNER_TEMP/checkout-before.manifest" "$RUNNER_TEMP/checkout-after-dry-run.manifest"
           if ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live \
-            > refusal.txt 2>&1; then
+            > "$RUNNER_TEMP/refusal.txt" 2>&1; then
             echo "Expected $SCENARIO grant refusal." >&2
             exit 1
           fi
-          rg -F "$expected_reason" refusal.txt
+          rg -F "$expected_reason" "$RUNNER_TEMP/refusal.txt"
+          checkout_manifest > "$RUNNER_TEMP/checkout-after-refusal.manifest"
+          cmp -s "$RUNNER_TEMP/checkout-before.manifest" "$RUNNER_TEMP/checkout-after-refusal.manifest"
           test ! -e .ota-pressure/scaffold-sample
           test ! -d .ota/receipts
 
@@ -146,10 +198,12 @@ jobs:
           if-no-files-found: warn
           path: |
             *-run.json
-            grant-dry-run.json
-            refusal.txt
-            receipt-history.json
             .ota/receipts/**
+            ${{ runner.temp }}/grant-dry-run.json
+            ${{ runner.temp }}/refusal.txt
+            ${{ runner.temp }}/receipt-history.json
+            ${{ runner.temp }}/hardened-runner.json
+            ${{ runner.temp }}/checkout-*.manifest
 
       - name: Record pressure boundary
         if: always()
