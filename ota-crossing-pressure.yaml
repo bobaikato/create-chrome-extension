@@ -47,7 +47,7 @@ agent:
     ota:
       source:
         kind: git_rev
-        rev: 02e8709f0e3304b8e747d96d3a1326e82b2376f7
+        rev: e9d8d8d6d206c65311f48d61648c8467b90f0c03
   notes: >
     This pressure-only contract verifies that absent prebound authority refuses the real scaffold
     action before the action creates its output. It does not claim a GitHub-hosted runner can

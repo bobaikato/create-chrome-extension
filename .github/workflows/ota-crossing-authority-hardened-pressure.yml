@@ -45,62 +45,61 @@ jobs:
   signed-grant-pressure:
     name: ${{ inputs.scenario }} signed grant on hardened runner
     # A runner administrator applies exactly one scenario label only after provisioning the fixed
-    # authority store, signed bundle, and sequence state. This workflow never creates or updates
-    # /etc/ota or /var/lib/ota and cannot turn the dispatch input into authority.
+    # Ota binary, authority store, signed bundle, and sequence state. This workflow never creates
+    # or updates /etc/ota or /var/lib/ota and cannot turn the dispatch input into authority.
     runs-on: [self-hosted, linux, "ota-crossing-${{ inputs.scenario }}"]
     timeout-minutes: 15
+    env:
+      EXPECTED_OTA_COMMIT: e9d8d8d6d206c65311f48d61648c8467b90f0c03
     steps:
+      - name: Verify pre-provisioned Ota build identity
+        run: |
+          set -euo pipefail
+          ota --version --json > "$RUNNER_TEMP/ota-version.json"
+          jq -e --arg commit "$EXPECTED_OTA_COMMIT" '
+            .ok == true and
+            .source_build == true and
+            .dirty == false and
+            .commit == $commit
+          ' "$RUNNER_TEMP/ota-version.json"
+
+      - name: Inspect the prebound authority hardening profile
+        run: |
+          set -euo pipefail
+          ota authority inspect --json > "$RUNNER_TEMP/hardened-runner.json"
+          jq -e '
+            .ok == true and
+            .kind == "authority_inspect" and
+            .profile.id == "prebound_file_hardening" and
+            .profile.version == 1 and
+            .profile.verdict == "matched_with_unknowns" and
+            .authority_source == "prebound_file" and
+            .authority_separation_posture == "current_process_filesystem_guarded" and
+            .platform.os == "linux" and
+            .platform.architecture == "x86_64" and
+            ([.observations[] | select(.required == true and .status != "passed")] | length) == 0 and
+            ([.observations[] | select(.id == "effective_user" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "docker_host" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "common_docker_socket" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "trust_store" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "authority_bindings" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "signed_bundles" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "sequence_states" and .status == "passed")] | length) == 1 and
+            ([.observations[] | select(.id == "passwordless_sudo" and .required == false and .status == "unknown")] | length) == 1
+          ' "$RUNNER_TEMP/hardened-runner.json"
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
 
-      - name: Reset only the pressure checkout state
-        run: git clean -ffdx
-
-      - name: Verify hardened runner preconditions
+      - name: Reconcile checked-out pressure contract with the pre-provisioned build
         run: |
           set -euo pipefail
-          test "$RUNNER_OS" = Linux
-          test "$(uname -m)" = x86_64
-          test "$(id -u)" -ne 0
-          if sudo -n true >/dev/null 2>&1; then
-            echo "The Ota process can acquire sudo; this runner cannot evidence authority separation." >&2
-            exit 1
-          fi
-          test -z "${DOCKER_HOST:-}"
-          test ! -S /var/run/docker.sock
-          test -f /etc/ota/crossing-authorities.json
-          test -r /etc/ota/crossing-authorities.json
-          test ! -w /etc/ota/crossing-authorities.json
-          test ! -w /etc/ota
-          test -f /var/lib/ota/crossing-authority.json
-          test -r /var/lib/ota/crossing-authority.json
-          test ! -w /var/lib/ota/crossing-authority.json
-          test -f /var/lib/ota/crossing-authority-sequence.json
-          test -r /var/lib/ota/crossing-authority-sequence.json
-          test ! -w /var/lib/ota/crossing-authority-sequence.json
-          test ! -w /var/lib/ota
-          jq -n \
-            --arg os "$RUNNER_OS" \
-            --arg architecture "$(uname -m)" \
-            --argjson uid "$(id -u)" \
-            '{
-              runner_os: $os,
-              architecture: $architecture,
-              runner_uid: $uid,
-              passwordless_sudo: false,
-              docker_host_configured: false,
-              docker_socket_present: false,
-              trust_store_writable: false,
-              bundle_writable: false,
-              sequence_state_writable: false
-            }' > "$RUNNER_TEMP/hardened-runner.json"
+          contract_commit="$(sed -nE 's/^[[:space:]]*rev:[[:space:]]*([^[:space:]#]+).*/\1/p' ota-crossing-pressure.yaml)"
+          test "$contract_commit" = "$EXPECTED_OTA_COMMIT"
 
-      - name: Install exact Ota source from pressure contract
-        uses: ota-run/setup@493cba84bf7f7c11c9e8e996d832d93a89c62184
-        with:
-          source: contract
-          contract-path: ota-crossing-pressure.yaml
+      - name: Reset only the pressure checkout state
+        run: git clean -ffdx
 
       - name: Validate and discover the governed pressure lane
         run: |
@@ -203,6 +202,7 @@ jobs:
             ${{ runner.temp }}/refusal.txt
             ${{ runner.temp }}/receipt-history.json
             ${{ runner.temp }}/hardened-runner.json
+            ${{ runner.temp }}/ota-version.json
             ${{ runner.temp }}/checkout-*.manifest
 
       - name: Record pressure boundary
