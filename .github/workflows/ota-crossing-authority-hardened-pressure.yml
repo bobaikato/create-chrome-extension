@@ -158,6 +158,9 @@ jobs:
             .receipt.crossing.authority.transaction.authentication_posture == "runner_local_content_addressed" and
             .receipt.crossing.authority.transaction.receipt_status == "success"
           ' "$archive"
+          # GitHub artifact upload excludes hidden `.ota` paths by default. Preserve the exact
+          # archive outside the checkout after it has passed the transaction assertions above.
+          cp "$archive" "$RUNNER_TEMP/crossing-receipt-archive.json"
           "$OTA_BINARY" receipt --history --file ota-crossing-pressure.yaml --json > "$RUNNER_TEMP/receipt-history.json"
           jq -e --arg archive "$archive" '
             .ok == true and
@@ -221,6 +224,7 @@ jobs:
             ${{ runner.temp }}/grant-dry-run.json
             ${{ runner.temp }}/refusal.txt
             ${{ runner.temp }}/receipt-history.json
+            ${{ runner.temp }}/crossing-receipt-archive.json
             ${{ runner.temp }}/hardened-runner.json
             ${{ runner.temp }}/ota-version.json
             ${{ runner.temp }}/checkout-*.manifest
