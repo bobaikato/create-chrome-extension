@@ -47,7 +47,9 @@ jobs:
     # A runner administrator applies exactly one scenario label only after provisioning the fixed
     # Ota binary, authority store, signed bundle, and sequence state. This workflow never creates
     # or updates /etc/ota or /var/lib/ota and cannot turn the dispatch input into authority.
-    runs-on: [self-hosted, linux, "ota-crossing-${{ inputs.scenario }}"]
+    # The VPS-only label prevents a similarly labeled local pressure runner from generating
+    # evidence attributed to the hardened host.
+    runs-on: [self-hosted, linux, "ota-crossing-vps-${{ inputs.scenario }}"]
     timeout-minutes: 15
     env:
       EXPECTED_OTA_COMMIT: e9d8d8d6d206c65311f48d61648c8467b90f0c03
