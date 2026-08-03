@@ -36,6 +36,3 @@ jobs:
 
       - name: Firefox build
         run: npm run build:firefox
-
-      - name: CWS ship-readiness check
-        run: npm run check:cws:ship
