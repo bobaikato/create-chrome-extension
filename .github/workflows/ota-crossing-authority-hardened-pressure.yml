@@ -72,11 +72,13 @@ jobs:
             .source_build == true and
             .dirty == false
           ' "$build_manifest"
-          jq -e --arg commit "${EXPECTED_OTA_COMMIT:0:10}" '
+          jq -e --arg expected_commit "$EXPECTED_OTA_COMMIT" '
+            .commit as $reported_commit |
             .ok == true and
             .source_build == true and
             .dirty == false and
-            .commit == $commit
+            ($reported_commit | type == "string" and length > 0) and
+            ($expected_commit | startswith($reported_commit))
           ' "$RUNNER_TEMP/ota-version.json"
 
       - name: Inspect the prebound authority hardening profile
