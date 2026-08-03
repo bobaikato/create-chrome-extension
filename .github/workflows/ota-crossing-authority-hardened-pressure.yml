@@ -55,8 +55,22 @@ jobs:
       - name: Verify pre-provisioned Ota build identity
         run: |
           set -euo pipefail
+          readonly build_manifest=/etc/ota/ota-build.json
+          test -f "$build_manifest"
+          test "$(stat -c '%U:%G:%a' "$build_manifest")" = 'root:root:644'
+          ota_path="$(readlink -f "$(command -v ota)")"
+          readonly ota_path
+          binary_sha256="sha256:$(sha256sum "$ota_path" | awk '{print $1}')"
+          readonly binary_sha256
           ota --version --json > "$RUNNER_TEMP/ota-version.json"
-          jq -e --arg commit "$EXPECTED_OTA_COMMIT" '
+          jq -e --arg commit "$EXPECTED_OTA_COMMIT" --arg binary_sha256 "$binary_sha256" '
+            .schema_version == 1 and
+            .commit == $commit and
+            .binary_sha256 == $binary_sha256 and
+            .source_build == true and
+            .dirty == false
+          ' "$build_manifest"
+          jq -e --arg commit "${EXPECTED_OTA_COMMIT:0:10}" '
             .ok == true and
             .source_build == true and
             .dirty == false and
