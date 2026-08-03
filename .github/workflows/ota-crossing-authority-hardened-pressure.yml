@@ -51,6 +51,7 @@ jobs:
     timeout-minutes: 15
     env:
       EXPECTED_OTA_COMMIT: e9d8d8d6d206c65311f48d61648c8467b90f0c03
+      OTA_BINARY: /usr/local/bin/ota
     steps:
       - name: Verify pre-provisioned Ota build identity
         run: |
@@ -58,11 +59,12 @@ jobs:
           readonly build_manifest=/etc/ota/ota-build.json
           test -f "$build_manifest"
           test "$(stat -c '%U:%G:%a' "$build_manifest")" = 'root:root:644'
-          ota_path="$(readlink -f "$(command -v ota)")"
+          test -x "$OTA_BINARY"
+          ota_path="$(readlink -f "$OTA_BINARY")"
           readonly ota_path
           binary_sha256="sha256:$(sha256sum "$ota_path" | awk '{print $1}')"
           readonly binary_sha256
-          ota --version --json > "$RUNNER_TEMP/ota-version.json"
+          "$OTA_BINARY" --version --json > "$RUNNER_TEMP/ota-version.json"
           jq -e --arg commit "$EXPECTED_OTA_COMMIT" --arg binary_sha256 "$binary_sha256" '
             .schema_version == 1 and
             .commit == $commit and
@@ -80,7 +82,7 @@ jobs:
       - name: Inspect the prebound authority hardening profile
         run: |
           set -euo pipefail
-          ota authority inspect --json > "$RUNNER_TEMP/hardened-runner.json"
+          "$OTA_BINARY" authority inspect --json > "$RUNNER_TEMP/hardened-runner.json"
           jq -e '
             .ok == true and
             .kind == "authority_inspect" and
@@ -118,16 +120,16 @@ jobs:
       - name: Validate and discover the governed pressure lane
         run: |
           set -euo pipefail
-          ota validate --file ota-crossing-pressure.yaml --json
-          ota doctor --file ota-crossing-pressure.yaml --json
-          ota tasks --file ota-crossing-pressure.yaml --use --json
-          ota tasks --file ota-crossing-pressure.yaml --safe --use --json
+          "$OTA_BINARY" validate --file ota-crossing-pressure.yaml --json
+          "$OTA_BINARY" doctor --file ota-crossing-pressure.yaml --json
+          "$OTA_BINARY" tasks --file ota-crossing-pressure.yaml --use --json
+          "$OTA_BINARY" tasks --file ota-crossing-pressure.yaml --safe --use --json
 
       - name: Derive the exact dry-run scope without consuming a crossing
         if: inputs.scenario == 'live'
         run: |
           set -euo pipefail
-          ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
+          "$OTA_BINARY" run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
             > "$RUNNER_TEMP/grant-dry-run.json"
           jq -e '.ok == true and .execution_started == false and .crossing_grant_admission.decision == "admissible_not_consumed"' \
             "$RUNNER_TEMP/grant-dry-run.json"
@@ -138,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e .ota-pressure/scaffold-sample
-          ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --receipt
+          "$OTA_BINARY" run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --receipt
           test -e .ota-pressure/scaffold-sample
           archive="./$(find .ota/receipts -type f -name 'repo-receipt-*.json' | sort | tail -n 1)"
           test -n "$archive"
@@ -152,7 +154,7 @@ jobs:
             .receipt.crossing.authority.transaction.authentication_posture == "runner_local_content_addressed" and
             .receipt.crossing.authority.transaction.receipt_status == "success"
           ' "$archive"
-          ota receipt --history --file ota-crossing-pressure.yaml --json > "$RUNNER_TEMP/receipt-history.json"
+          "$OTA_BINARY" receipt --history --file ota-crossing-pressure.yaml --json > "$RUNNER_TEMP/receipt-history.json"
           jq -e --arg archive "$archive" '
             .ok == true and
             .summary.archive_count == 1 and
@@ -182,7 +184,7 @@ jobs:
           }
           checkout_manifest > "$RUNNER_TEMP/checkout-before.manifest"
           test ! -e .ota-pressure/scaffold-sample
-          if ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
+          if "$OTA_BINARY" run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live --dry-run --json \
             > "$RUNNER_TEMP/grant-dry-run.json" 2>&1; then
             echo "Expected $SCENARIO dry-run grant refusal." >&2
             exit 1
@@ -192,7 +194,7 @@ jobs:
             "$RUNNER_TEMP/grant-dry-run.json"
           checkout_manifest > "$RUNNER_TEMP/checkout-after-dry-run.manifest"
           cmp -s "$RUNNER_TEMP/checkout-before.manifest" "$RUNNER_TEMP/checkout-after-dry-run.manifest"
-          if ota run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live \
+          if "$OTA_BINARY" run scaffold:sample --file ota-crossing-pressure.yaml --grant fixture-live \
             > "$RUNNER_TEMP/refusal.txt" 2>&1; then
             echo "Expected $SCENARIO grant refusal." >&2
             exit 1
