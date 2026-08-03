@@ -206,7 +206,7 @@ jobs:
             echo "Expected $SCENARIO grant refusal." >&2
             exit 1
           fi
-          rg -F "$expected_reason" "$RUNNER_TEMP/refusal.txt"
+          grep -F -- "$expected_reason" "$RUNNER_TEMP/refusal.txt"
           checkout_manifest > "$RUNNER_TEMP/checkout-after-refusal.manifest"
           cmp -s "$RUNNER_TEMP/checkout-before.manifest" "$RUNNER_TEMP/checkout-after-refusal.manifest"
           test ! -e .ota-pressure/scaffold-sample
