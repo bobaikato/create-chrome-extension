@@ -1,0 +1,90 @@
+#
+#                █████
+#               ░░███
+#       ██████  ███████    ██████
+#      ███░░███░░░███░    ░░░░░███
+#     ░███ ░███  ░███      ███████
+#     ░███ ░███  ░███ ███ ███░░███
+#     ░░██████   ░░█████ ░░████████
+#      ░░░░░░     ░░░░░   ░░░░░░░░
+#
+#   Copyright (C) 2026 — 2026, Ota. All Rights Reserved.
+#
+#   DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+#
+#   Licensed under the Apache License, Version 2.0. See LICENSE for the full license text.
+#   You may not use this file except in compliance with the License.
+#   Unless required by applicable law or agreed to in writing, software distributed under the
+#   License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+#   either express or implied. See the License for the specific language governing permissions
+#   and limitations under the License.
+#
+#   If you need additional information or have any questions, please email: os@ota.run
+#
+
+name: Ota Launcher openat2 Pressure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ota-launcher-openat2-pressure
+  cancel-in-progress: false
+
+jobs:
+  positive-openat2-containment:
+    name: positive openat2 containment on Linux x64
+    runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
+    timeout-minutes: 15
+    env:
+      EXPECTED_LAUNCHER_COMMIT: 99affd90f712512fa1fd7c039868d114904736cf
+    steps:
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.95.0
+
+      - name: Prove exact launcher openat2 containment
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+
+          launcher_dir="$RUNNER_TEMP/authority-launcher-openat2-$GITHUB_RUN_ID"
+          git init --quiet "$launcher_dir"
+          git -C "$launcher_dir" remote add origin https://github.com/ota-run/authority-launcher.git
+          git -C "$launcher_dir" fetch --quiet --depth=1 origin "$EXPECTED_LAUNCHER_COMMIT"
+          git -C "$launcher_dir" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$launcher_dir" rev-parse HEAD)" = "$EXPECTED_LAUNCHER_COMMIT"
+          test -z "$(git -C "$launcher_dir" status --porcelain)"
+
+          {
+            printf 'launcher_commit=%s\n' "$EXPECTED_LAUNCHER_COMMIT"
+            printf 'kernel=%s\n' "$(uname -srvm)"
+            printf 'architecture=%s\n' "$(uname -m)"
+            cargo --version
+            cargo test \
+              --manifest-path "$launcher_dir/Cargo.toml" \
+              target_directory::tests::positive_openat2_pressure_refuses_symlink_escape \
+              -- --ignored --exact --nocapture
+          } 2>&1 | tee "$RUNNER_TEMP/openat2-pressure.txt"
+
+      - name: Preserve bounded kernel evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ota-launcher-openat2-pressure
+          if-no-files-found: error
+          path: ${{ runner.temp }}/openat2-pressure.txt
+
+      - name: Record proof boundary
+        if: always()
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          This job proves that the named Linux/x86_64 VPS kernel applies the exact launcher's
+          openat2 containment flags and rejects a symlink escape. It does not prove the root
+          UID-switching helper, the systemd service, broker authority, or selected task execution.
+          EOF
