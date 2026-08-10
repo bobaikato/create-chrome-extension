@@ -102,7 +102,7 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 20
     env:
-      EXPECTED_OTA_COMMIT: cc7d823233ec1846614b9bc1267a9549fd5acdbb
+      EXPECTED_OTA_COMMIT: a19a62613e01ccd393f2affe3d15c30eb66c7df1
       EXPECTED_LAUNCHER_COMMIT: ebbe777682bafa8384b28070e95cf91037d7f451
       PRESSURE_SCENARIO: ${{ inputs.scenario }}
       PRESSURE_REPOSITORY: /srv/ota-scope-pressure/repository
