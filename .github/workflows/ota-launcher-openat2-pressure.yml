@@ -48,7 +48,7 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 15
     env:
-      EXPECTED_LAUNCHER_COMMIT: ebbe777682bafa8384b28070e95cf91037d7f451
+      EXPECTED_LAUNCHER_COMMIT: d8aa1d0bf9783d29d53d0a5e912f09f1fa414624
     steps:
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
@@ -102,8 +102,8 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 20
     env:
-      EXPECTED_OTA_COMMIT: a19a62613e01ccd393f2affe3d15c30eb66c7df1
-      EXPECTED_LAUNCHER_COMMIT: ebbe777682bafa8384b28070e95cf91037d7f451
+      EXPECTED_OTA_COMMIT: cc680cef790bf8334ee0dfe513c202a51c21954e
+      EXPECTED_LAUNCHER_COMMIT: d8aa1d0bf9783d29d53d0a5e912f09f1fa414624
       PRESSURE_SCENARIO: ${{ inputs.scenario }}
       PRESSURE_REPOSITORY: /srv/ota-scope-pressure/repository
       INSTALLED_OTA: /usr/lib/ota-authority-scope-pressure/ota
@@ -272,7 +272,8 @@ jobs:
             .ok == true and
             .kind == "systemd_transient_scope_pressure" and
             .terminal.outcome == "refused" and
-            .terminal.exit_code == 2
+            .terminal.exit_code == 2 and
+            .terminal.stage == "posture_admitted_boundary_removed"
           ' "$EVIDENCE_DIR/terminal.json"
 
           systemctl list-units --all --plain --no-legend 'ota-authority-invocation-*.scope' \
@@ -337,12 +338,28 @@ jobs:
 
       - name: Record proof boundary
         if: always()
+        env:
+          PRESSURE_JOB_STATUS: ${{ job.status }}
         run: |
-          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-          This job proves the exact immutable launcher and pressure-client binaries on the
-          administrator-provisioned Linux/x86_64 VPS. The normal scenario proves Core's private
-          process posture was admitted before terminal scope removal. The crash-recovery scenario
-          proves one root-armed post-scope crash and cleanup before the next request. CLI dispatch,
-          V3 attestation, broker authorization, one-use lease consumption, selected work, receipts,
-          archives, and provider attestation remain unproved.
+          if [ "$PRESSURE_JOB_STATUS" != success ]; then
+            printf '%s\n' \
+              "The $PRESSURE_SCENARIO pressure scenario did not complete successfully." \
+              "No systemd posture or cleanup proof is claimed; inspect the retained evidence and logs." \
+              >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$PRESSURE_SCENARIO" = normal ]; then
+            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          This normal scenario proves the exact immutable Core, launcher, and pressure-client
+          binaries on the administrator-provisioned Linux/x86_64 VPS admitted Core's private
+          process posture and confirmed exact transient-scope removal before the typed terminal
+          refusal. CLI dispatch, V3 attestation, broker authorization, one-use lease consumption,
+          selected work, receipts, archives, and provider attestation remain unproved.
           EOF
+          else
+            cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          This crash-recovery scenario proves one root-armed post-scope launcher crash on the
+          administrator-provisioned Linux/x86_64 VPS, followed by exact reconciliation and a fresh
+          posture-admitted boundary whose transient scope was removed before terminal refusal.
+          CLI dispatch, V3 attestation, broker authorization, one-use lease consumption, selected
+          work, receipts, archives, and provider attestation remain unproved.
+          EOF
+          fi
