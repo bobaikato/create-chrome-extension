@@ -240,6 +240,7 @@ jobs:
 
           first_status=0
           crash_scope_units=0
+          crash_service_exit=not_applicable
           if [ "$PRESSURE_SCENARIO" = crash-recovery ]; then
             set +e
             run_client >"$EVIDENCE_DIR/first-client.output" 2>&1
@@ -254,6 +255,8 @@ jobs:
               sleep 0.1
             done
             test "$observed_exit" = 86
+            crash_service_exit=$observed_exit
+            test ! -e /run/ota/authority-launcher-pressure-exit-after-scope
             systemctl list-units --all --plain --no-legend 'ota-authority-invocation-*.scope' \
               >"$EVIDENCE_DIR/scopes-after-crash.txt"
             crash_scope_units=$(grep -c 'ota-authority-invocation-' \
@@ -289,6 +292,7 @@ jobs:
             --arg systemd "$(systemd --version | head -1)" \
             --arg repository_before "$before_identity" \
             --arg repository_after "$after_identity" \
+            --arg crash_service_exit "$crash_service_exit" \
             --argjson first_status "$first_status" \
             --argjson crash_scope_units "$crash_scope_units" \
             --argjson terminal "$(cat "$EVIDENCE_DIR/terminal.json")" \
@@ -304,6 +308,7 @@ jobs:
               },
               platform: {os: "linux", architecture: "x86_64", kernel: $kernel, systemd: $systemd},
               crash_client_exit: $first_status,
+              crash_service_exit: $crash_service_exit,
               terminal: $terminal,
               repository_identity: {before: $repository_before, after: $repository_after},
               cleanup: {
