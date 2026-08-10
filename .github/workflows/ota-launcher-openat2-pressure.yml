@@ -131,7 +131,8 @@ jobs:
           test "$(git -C "$launcher_dir" rev-parse HEAD)" = "$EXPECTED_LAUNCHER_COMMIT"
           test -z "$(git -C "$launcher_dir" status --porcelain)"
 
-          CARGO_TARGET_DIR="$target_dir" cargo build \
+          build_flags="--remap-path-prefix=$CARGO_HOME=/cargo-home --remap-path-prefix=$launcher_dir=/workspace/authority-launcher"
+          CARGO_TARGET_DIR="$target_dir" RUSTFLAGS="$build_flags" cargo build \
             --manifest-path "$launcher_dir/Cargo.toml" \
             --release \
             --features systemd-pressure-client,systemd-pressure-faults \
@@ -159,6 +160,7 @@ jobs:
           {
             printf 'launcher_commit=%s\n' "$EXPECTED_LAUNCHER_COMMIT"
             printf 'checked_out_commit=%s\n' "$(git -C "$LAUNCHER_DIR" rev-parse HEAD)"
+            printf 'build_recipe=rust-path-remap-v1\n'
             printf 'clean_launcher_sha256=%s\n' "$clean_launcher_sha"
             printf 'installed_launcher_sha256=%s\n' "$installed_launcher_sha"
             printf 'clean_client_sha256=%s\n' "$clean_client_sha"
