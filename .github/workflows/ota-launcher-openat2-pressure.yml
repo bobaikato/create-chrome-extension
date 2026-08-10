@@ -148,12 +148,31 @@ jobs:
           set -euo pipefail
           test -x "$INSTALLED_LAUNCHER"
           test -x "$INSTALLED_CLIENT"
-          test "$(sha256sum "$TARGET_DIR/release/ota-authority-launcher" | cut -d' ' -f1)" = \
-            "$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)"
-          test "$(sha256sum "$TARGET_DIR/release/ota-authority-systemd-pressure-client" | cut -d' ' -f1)" = \
-            "$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)"
-          test "$(stat -c '%U:%G:%a' "$INSTALLED_LAUNCHER")" = "root:root:755"
-          test "$(stat -c '%U:%G:%a' "$INSTALLED_CLIENT")" = "root:root:755"
+
+          clean_launcher_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-launcher" | cut -d' ' -f1)
+          installed_launcher_sha=$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)
+          clean_client_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-systemd-pressure-client" | cut -d' ' -f1)
+          installed_client_sha=$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)
+          launcher_posture=$(stat -c '%U:%G:%a' "$INSTALLED_LAUNCHER")
+          client_posture=$(stat -c '%U:%G:%a' "$INSTALLED_CLIENT")
+
+          {
+            printf 'launcher_commit=%s\n' "$EXPECTED_LAUNCHER_COMMIT"
+            printf 'checked_out_commit=%s\n' "$(git -C "$LAUNCHER_DIR" rev-parse HEAD)"
+            printf 'clean_launcher_sha256=%s\n' "$clean_launcher_sha"
+            printf 'installed_launcher_sha256=%s\n' "$installed_launcher_sha"
+            printf 'clean_client_sha256=%s\n' "$clean_client_sha"
+            printf 'installed_client_sha256=%s\n' "$installed_client_sha"
+            printf 'installed_launcher_posture=%s\n' "$launcher_posture"
+            printf 'installed_client_posture=%s\n' "$client_posture"
+            rustc -Vv
+            cargo -V
+          } | tee "$EVIDENCE_DIR/source-binding.txt"
+
+          test "$clean_launcher_sha" = "$installed_launcher_sha"
+          test "$clean_client_sha" = "$installed_client_sha"
+          test "$launcher_posture" = "root:root:755"
+          test "$client_posture" = "root:root:755"
 
       - name: Prove repository job cannot administer authority boundary
         run: |
