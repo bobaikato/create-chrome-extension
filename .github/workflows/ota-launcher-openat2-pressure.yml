@@ -206,6 +206,7 @@ jobs:
           }
 
           first_status=0
+          crash_scope_units=0
           if [ "$PRESSURE_SCENARIO" = crash-recovery ]; then
             set +e
             run_client >"$EVIDENCE_DIR/first-client.output" 2>&1
@@ -222,7 +223,12 @@ jobs:
             test "$observed_exit" = 86
             systemctl list-units --all --plain --no-legend 'ota-authority-invocation-*.scope' \
               >"$EVIDENCE_DIR/scopes-after-crash.txt"
-            test "$(grep -c 'ota-authority-invocation-' "$EVIDENCE_DIR/scopes-after-crash.txt")" -eq 1
+            crash_scope_units=$(grep -c 'ota-authority-invocation-' \
+              "$EVIDENCE_DIR/scopes-after-crash.txt" || true)
+            # The execution-disabled child may exit before observation, allowing systemd to
+            # collect the empty scope. The durable root-owned slot still forces reconciliation
+            # before the next request; more than one exact scope is never valid.
+            test "$crash_scope_units" -le 1
           fi
 
           run_client >"$EVIDENCE_DIR/terminal.json"
@@ -249,6 +255,7 @@ jobs:
             --arg repository_before "$before_identity" \
             --arg repository_after "$after_identity" \
             --argjson first_status "$first_status" \
+            --argjson crash_scope_units "$crash_scope_units" \
             --argjson terminal "$(cat "$EVIDENCE_DIR/terminal.json")" \
             '{
               kind: "ota_systemd_scope_immutable_pressure",
@@ -262,7 +269,10 @@ jobs:
               crash_client_exit: $first_status,
               terminal: $terminal,
               repository_identity: {before: $repository_before, after: $repository_after},
-              cleanup: {transient_scope_units: 0},
+              cleanup: {
+                transient_scope_units_after_crash: $crash_scope_units,
+                transient_scope_units_after_terminal: 0
+              },
               boundaries: [
                 "execution_disabled",
                 "no_v3_attestation",
