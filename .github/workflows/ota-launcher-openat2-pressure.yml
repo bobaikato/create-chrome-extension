@@ -22,10 +22,18 @@
 #   If you need additional information or have any questions, please email: os@ota.run
 #
 
-name: Ota Launcher openat2 Pressure
+name: Ota Launcher systemd Pressure
 
 on:
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: Immutable systemd pressure scenario prepared by the runner administrator
+        required: true
+        type: choice
+        options:
+          - normal
+          - crash-recovery
 
 permissions:
   contents: read
@@ -40,7 +48,7 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 15
     env:
-      EXPECTED_LAUNCHER_COMMIT: 99affd90f712512fa1fd7c039868d114904736cf
+      EXPECTED_LAUNCHER_COMMIT: 0f9d9eb33e37d6cd855aafdbc7c4d72b3c8957e2
     steps:
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
@@ -87,4 +95,211 @@ jobs:
           This job proves that the named Linux/x86_64 VPS kernel applies the exact launcher's
           openat2 containment flags and rejects a symlink escape. It does not prove the root
           UID-switching helper, the systemd service, broker authority, or selected task execution.
+          EOF
+
+  immutable-systemd-boundary:
+    name: immutable systemd ${{ inputs.scenario }} boundary
+    runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
+    timeout-minutes: 20
+    env:
+      EXPECTED_LAUNCHER_COMMIT: 0f9d9eb33e37d6cd855aafdbc7c4d72b3c8957e2
+      PRESSURE_SCENARIO: ${{ inputs.scenario }}
+      PRESSURE_REPOSITORY: /srv/ota-scope-pressure/repository
+      INSTALLED_LAUNCHER: /usr/lib/ota-authority-scope-pressure/ota-authority-launcher
+      INSTALLED_CLIENT: /usr/local/bin/ota-authority-systemd-pressure-client
+      PRESSURE_SERVICE: ota-authority-scope-pressure.service
+      PRESSURE_SOCKET: ota-authority-scope-pressure.socket
+    steps:
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.95.0
+
+      - name: Build exact immutable pressure binaries
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          test "$(id -u)" -ne 0
+
+          launcher_dir="$RUNNER_TEMP/authority-launcher-systemd-$GITHUB_RUN_ID"
+          target_dir="$RUNNER_TEMP/authority-launcher-target-$GITHUB_RUN_ID"
+          git init --quiet "$launcher_dir"
+          git -C "$launcher_dir" remote add origin https://github.com/ota-run/authority-launcher.git
+          git -C "$launcher_dir" fetch --quiet --depth=1 origin "$EXPECTED_LAUNCHER_COMMIT"
+          git -C "$launcher_dir" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$launcher_dir" rev-parse HEAD)" = "$EXPECTED_LAUNCHER_COMMIT"
+          test -z "$(git -C "$launcher_dir" status --porcelain)"
+
+          build_flags="--remap-path-prefix=$CARGO_HOME=/cargo-home --remap-path-prefix=$launcher_dir=/workspace/authority-launcher"
+          CARGO_TARGET_DIR="$target_dir" RUSTFLAGS="$build_flags" cargo build \
+            --manifest-path "$launcher_dir/Cargo.toml" \
+            --release \
+            --features systemd-pressure-client,systemd-pressure-faults \
+            --bin ota-authority-launcher \
+            --bin ota-authority-systemd-pressure-client
+
+          evidence_dir="$RUNNER_TEMP/systemd-pressure-evidence-$GITHUB_RUN_ID"
+          mkdir -p "$evidence_dir"
+          printf 'LAUNCHER_DIR=%s\nTARGET_DIR=%s\nEVIDENCE_DIR=%s\n' \
+            "$launcher_dir" "$target_dir" "$evidence_dir" >> "$GITHUB_ENV"
+
+      - name: Bind installed service to exact source build
+        run: |
+          set -euo pipefail
+          test -x "$INSTALLED_LAUNCHER"
+          test -x "$INSTALLED_CLIENT"
+
+          clean_launcher_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-launcher" | cut -d' ' -f1)
+          installed_launcher_sha=$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)
+          clean_client_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-systemd-pressure-client" | cut -d' ' -f1)
+          installed_client_sha=$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)
+          launcher_posture=$(stat -c '%U:%G:%a' "$INSTALLED_LAUNCHER")
+          client_posture=$(stat -c '%U:%G:%a' "$INSTALLED_CLIENT")
+
+          {
+            printf 'launcher_commit=%s\n' "$EXPECTED_LAUNCHER_COMMIT"
+            printf 'checked_out_commit=%s\n' "$(git -C "$LAUNCHER_DIR" rev-parse HEAD)"
+            printf 'build_recipe=rust-path-remap-v1\n'
+            printf 'clean_launcher_sha256=%s\n' "$clean_launcher_sha"
+            printf 'installed_launcher_sha256=%s\n' "$installed_launcher_sha"
+            printf 'clean_client_sha256=%s\n' "$clean_client_sha"
+            printf 'installed_client_sha256=%s\n' "$installed_client_sha"
+            printf 'installed_launcher_posture=%s\n' "$launcher_posture"
+            printf 'installed_client_posture=%s\n' "$client_posture"
+            rustc -Vv
+            cargo -V
+          } | tee "$EVIDENCE_DIR/source-binding.txt"
+
+          test "$clean_launcher_sha" = "$installed_launcher_sha"
+          test "$clean_client_sha" = "$installed_client_sha"
+          test "$launcher_posture" = "root:root:755"
+          test "$client_posture" = "root:root:755"
+
+      - name: Prove repository job cannot administer authority boundary
+        run: |
+          set -euo pipefail
+          test "$(systemctl is-active "$PRESSURE_SOCKET")" = active
+          test -S /run/ota/authority-launcher.sock
+          test "$(stat -c '%U:%G:%a' /run/ota/authority-launcher.sock)" = "root:ota-runner:660"
+          test ! -r /etc/ota/authority-launcher-systemd.json
+          test ! -w /etc/ota/authority-launcher-systemd.json
+          test ! -r /var/lib/ota/authority-launcher/active
+          test ! -w /var/lib/ota/authority-launcher/active
+          test ! -r /run/ota/authority-launcher-pressure-exit-after-scope
+          test ! -w /run/ota/authority-launcher-pressure-exit-after-scope
+
+      - name: Execute immutable systemd pressure scenario
+        run: |
+          set -euo pipefail
+          repository_identity() {
+            tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+              -cf - -C "$PRESSURE_REPOSITORY" . | sha256sum | cut -d' ' -f1
+          }
+          before_identity=$(repository_identity)
+
+          run_client() {
+            "$INSTALLED_CLIENT" \
+              --authority-id scope-pressure-authority \
+              --repository "$PRESSURE_REPOSITORY" \
+              -- run verify
+          }
+
+          first_status=0
+          crash_scope_units=0
+          if [ "$PRESSURE_SCENARIO" = crash-recovery ]; then
+            set +e
+            run_client >"$EVIDENCE_DIR/first-client.output" 2>&1
+            first_status=$?
+            set -e
+            test "$first_status" -ne 0
+
+            observed_exit=""
+            for _ in $(seq 1 50); do
+              observed_exit=$(systemctl show "$PRESSURE_SERVICE" -p ExecMainStatus --value)
+              [ "$observed_exit" = 86 ] && break
+              sleep 0.1
+            done
+            test "$observed_exit" = 86
+            systemctl list-units --all --plain --no-legend 'ota-authority-invocation-*.scope' \
+              >"$EVIDENCE_DIR/scopes-after-crash.txt"
+            crash_scope_units=$(grep -c 'ota-authority-invocation-' \
+              "$EVIDENCE_DIR/scopes-after-crash.txt" || true)
+            # The execution-disabled child may exit before observation, allowing systemd to
+            # collect the empty scope. The durable root-owned slot still forces reconciliation
+            # before the next request; more than one exact scope is never valid.
+            test "$crash_scope_units" -le 1
+          fi
+
+          run_client >"$EVIDENCE_DIR/terminal.json"
+          jq -e '
+            .ok == true and
+            .kind == "systemd_transient_scope_pressure" and
+            .terminal.outcome == "refused" and
+            .terminal.exit_code == 2
+          ' "$EVIDENCE_DIR/terminal.json"
+
+          systemctl list-units --all --plain --no-legend 'ota-authority-invocation-*.scope' \
+            >"$EVIDENCE_DIR/scopes-after-terminal.txt"
+          test ! -s "$EVIDENCE_DIR/scopes-after-terminal.txt"
+          after_identity=$(repository_identity)
+          test "$after_identity" = "$before_identity"
+
+          jq -n \
+            --arg scenario "$PRESSURE_SCENARIO" \
+            --arg launcher_commit "$EXPECTED_LAUNCHER_COMMIT" \
+            --arg launcher_sha256 "$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)" \
+            --arg client_sha256 "$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)" \
+            --arg kernel "$(uname -r)" \
+            --arg systemd "$(systemd --version | head -1)" \
+            --arg repository_before "$before_identity" \
+            --arg repository_after "$after_identity" \
+            --argjson first_status "$first_status" \
+            --argjson crash_scope_units "$crash_scope_units" \
+            --argjson terminal "$(cat "$EVIDENCE_DIR/terminal.json")" \
+            '{
+              kind: "ota_systemd_scope_immutable_pressure",
+              scenario: $scenario,
+              source: {
+                launcher_commit: $launcher_commit,
+                launcher_sha256: $launcher_sha256,
+                client_sha256: $client_sha256
+              },
+              platform: {os: "linux", architecture: "x86_64", kernel: $kernel, systemd: $systemd},
+              crash_client_exit: $first_status,
+              terminal: $terminal,
+              repository_identity: {before: $repository_before, after: $repository_after},
+              cleanup: {
+                transient_scope_units_after_crash: $crash_scope_units,
+                transient_scope_units_after_terminal: 0
+              },
+              boundaries: [
+                "execution_disabled",
+                "no_v3_attestation",
+                "no_broker_authorization",
+                "no_lease_consumption",
+                "no_selected_task_execution",
+                "no_receipt_or_archive",
+                "privilege_escalation_posture_not_attested"
+              ]
+            }' >"$EVIDENCE_DIR/evidence.json"
+
+      - name: Upload bounded systemd evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ota-launcher-systemd-${{ inputs.scenario }}-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 14
+          path: ${{ env.EVIDENCE_DIR }}
+
+      - name: Record proof boundary
+        if: always()
+        run: |
+          cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          This job proves the exact immutable launcher and pressure-client binaries on the
+          administrator-provisioned Linux/x86_64 VPS. The normal scenario proves terminal scope
+          removal. The crash-recovery scenario proves one root-armed post-scope crash and cleanup
+          before the next request. Execution, V3 attestation, broker authorization, one-use lease
+          consumption, selected work, receipts, archives, and provider attestation remain unproved.
           EOF
