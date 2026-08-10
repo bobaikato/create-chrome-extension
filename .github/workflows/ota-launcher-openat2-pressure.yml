@@ -48,7 +48,7 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 15
     env:
-      EXPECTED_LAUNCHER_COMMIT: 0f9d9eb33e37d6cd855aafdbc7c4d72b3c8957e2
+      EXPECTED_LAUNCHER_COMMIT: ebbe777682bafa8384b28070e95cf91037d7f451
     steps:
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
@@ -102,9 +102,11 @@ jobs:
     runs-on: [self-hosted, linux, "ota-crossing-vps-${{ 'live' }}"]
     timeout-minutes: 20
     env:
-      EXPECTED_LAUNCHER_COMMIT: 0f9d9eb33e37d6cd855aafdbc7c4d72b3c8957e2
+      EXPECTED_OTA_COMMIT: cc7d823233ec1846614b9bc1267a9549fd5acdbb
+      EXPECTED_LAUNCHER_COMMIT: ebbe777682bafa8384b28070e95cf91037d7f451
       PRESSURE_SCENARIO: ${{ inputs.scenario }}
       PRESSURE_REPOSITORY: /srv/ota-scope-pressure/repository
+      INSTALLED_OTA: /usr/lib/ota-authority-scope-pressure/ota
       INSTALLED_LAUNCHER: /usr/lib/ota-authority-scope-pressure/ota-authority-launcher
       INSTALLED_CLIENT: /usr/local/bin/ota-authority-systemd-pressure-client
       PRESSURE_SERVICE: ota-authority-scope-pressure.service
@@ -122,8 +124,16 @@ jobs:
           test "$(uname -m)" = x86_64
           test "$(id -u)" -ne 0
 
+          core_dir="$RUNNER_TEMP/ota-core-systemd-$GITHUB_RUN_ID"
           launcher_dir="$RUNNER_TEMP/authority-launcher-systemd-$GITHUB_RUN_ID"
           target_dir="$RUNNER_TEMP/authority-launcher-target-$GITHUB_RUN_ID"
+          git init --quiet "$core_dir"
+          git -C "$core_dir" remote add origin https://github.com/ota-run/ota.git
+          git -C "$core_dir" fetch --quiet --depth=1 origin "$EXPECTED_OTA_COMMIT"
+          git -C "$core_dir" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$core_dir" rev-parse HEAD)" = "$EXPECTED_OTA_COMMIT"
+          test -z "$(git -C "$core_dir" status --porcelain)"
+
           git init --quiet "$launcher_dir"
           git -C "$launcher_dir" remote add origin https://github.com/ota-run/authority-launcher.git
           git -C "$launcher_dir" fetch --quiet --depth=1 origin "$EXPECTED_LAUNCHER_COMMIT"
@@ -131,7 +141,11 @@ jobs:
           test "$(git -C "$launcher_dir" rev-parse HEAD)" = "$EXPECTED_LAUNCHER_COMMIT"
           test -z "$(git -C "$launcher_dir" status --porcelain)"
 
-          build_flags="--remap-path-prefix=$CARGO_HOME=/cargo-home --remap-path-prefix=$launcher_dir=/workspace/authority-launcher"
+          build_flags="--remap-path-prefix=$CARGO_HOME=/cargo-home --remap-path-prefix=$core_dir=/workspace/ota --remap-path-prefix=$launcher_dir=/workspace/authority-launcher"
+          CARGO_TARGET_DIR="$target_dir" RUSTFLAGS="$build_flags" cargo build \
+            --manifest-path "$core_dir/Cargo.toml" \
+            --release \
+            --bin ota
           CARGO_TARGET_DIR="$target_dir" RUSTFLAGS="$build_flags" cargo build \
             --manifest-path "$launcher_dir/Cargo.toml" \
             --release \
@@ -141,38 +155,57 @@ jobs:
 
           evidence_dir="$RUNNER_TEMP/systemd-pressure-evidence-$GITHUB_RUN_ID"
           mkdir -p "$evidence_dir"
-          printf 'LAUNCHER_DIR=%s\nTARGET_DIR=%s\nEVIDENCE_DIR=%s\n' \
-            "$launcher_dir" "$target_dir" "$evidence_dir" >> "$GITHUB_ENV"
+          printf 'CORE_DIR=%s\nLAUNCHER_DIR=%s\nTARGET_DIR=%s\nEVIDENCE_DIR=%s\n' \
+            "$core_dir" "$launcher_dir" "$target_dir" "$evidence_dir" >> "$GITHUB_ENV"
 
       - name: Bind installed service to exact source build
         run: |
           set -euo pipefail
+          test -x "$INSTALLED_OTA"
           test -x "$INSTALLED_LAUNCHER"
           test -x "$INSTALLED_CLIENT"
 
+          clean_ota_sha=$(sha256sum "$TARGET_DIR/release/ota" | cut -d' ' -f1)
+          installed_ota_sha=$(sha256sum "$INSTALLED_OTA" | cut -d' ' -f1)
           clean_launcher_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-launcher" | cut -d' ' -f1)
           installed_launcher_sha=$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)
           clean_client_sha=$(sha256sum "$TARGET_DIR/release/ota-authority-systemd-pressure-client" | cut -d' ' -f1)
           installed_client_sha=$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)
+          ota_posture=$(stat -c '%U:%G:%a' "$INSTALLED_OTA")
           launcher_posture=$(stat -c '%U:%G:%a' "$INSTALLED_LAUNCHER")
           client_posture=$(stat -c '%U:%G:%a' "$INSTALLED_CLIENT")
+          "$INSTALLED_OTA" --version --json > "$EVIDENCE_DIR/ota-version.json"
+          jq -e --arg expected_commit "$EXPECTED_OTA_COMMIT" '
+            .commit as $reported_commit |
+            .ok == true and
+            .source_build == true and
+            .dirty == false and
+            ($expected_commit | startswith($reported_commit))
+          ' "$EVIDENCE_DIR/ota-version.json"
 
           {
+            printf 'ota_commit=%s\n' "$EXPECTED_OTA_COMMIT"
+            printf 'ota_checked_out_commit=%s\n' "$(git -C "$CORE_DIR" rev-parse HEAD)"
             printf 'launcher_commit=%s\n' "$EXPECTED_LAUNCHER_COMMIT"
             printf 'checked_out_commit=%s\n' "$(git -C "$LAUNCHER_DIR" rev-parse HEAD)"
             printf 'build_recipe=rust-path-remap-v1\n'
+            printf 'clean_ota_sha256=%s\n' "$clean_ota_sha"
+            printf 'installed_ota_sha256=%s\n' "$installed_ota_sha"
             printf 'clean_launcher_sha256=%s\n' "$clean_launcher_sha"
             printf 'installed_launcher_sha256=%s\n' "$installed_launcher_sha"
             printf 'clean_client_sha256=%s\n' "$clean_client_sha"
             printf 'installed_client_sha256=%s\n' "$installed_client_sha"
+            printf 'installed_ota_posture=%s\n' "$ota_posture"
             printf 'installed_launcher_posture=%s\n' "$launcher_posture"
             printf 'installed_client_posture=%s\n' "$client_posture"
             rustc -Vv
             cargo -V
           } | tee "$EVIDENCE_DIR/source-binding.txt"
 
+          test "$clean_ota_sha" = "$installed_ota_sha"
           test "$clean_launcher_sha" = "$installed_launcher_sha"
           test "$clean_client_sha" = "$installed_client_sha"
+          test "$ota_posture" = "root:root:755"
           test "$launcher_posture" = "root:root:755"
           test "$client_posture" = "root:root:755"
 
@@ -247,6 +280,8 @@ jobs:
 
           jq -n \
             --arg scenario "$PRESSURE_SCENARIO" \
+            --arg ota_commit "$EXPECTED_OTA_COMMIT" \
+            --arg ota_sha256 "$(sha256sum "$INSTALLED_OTA" | cut -d' ' -f1)" \
             --arg launcher_commit "$EXPECTED_LAUNCHER_COMMIT" \
             --arg launcher_sha256 "$(sha256sum "$INSTALLED_LAUNCHER" | cut -d' ' -f1)" \
             --arg client_sha256 "$(sha256sum "$INSTALLED_CLIENT" | cut -d' ' -f1)" \
@@ -261,6 +296,8 @@ jobs:
               kind: "ota_systemd_scope_immutable_pressure",
               scenario: $scenario,
               source: {
+                ota_commit: $ota_commit,
+                ota_sha256: $ota_sha256,
                 launcher_commit: $launcher_commit,
                 launcher_sha256: $launcher_sha256,
                 client_sha256: $client_sha256
@@ -274,7 +311,7 @@ jobs:
                 transient_scope_units_after_terminal: 0
               },
               boundaries: [
-                "execution_disabled",
+                "posture_only_execution_disabled",
                 "no_v3_attestation",
                 "no_broker_authorization",
                 "no_lease_consumption",
@@ -298,8 +335,9 @@ jobs:
         run: |
           cat <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           This job proves the exact immutable launcher and pressure-client binaries on the
-          administrator-provisioned Linux/x86_64 VPS. The normal scenario proves terminal scope
-          removal. The crash-recovery scenario proves one root-armed post-scope crash and cleanup
-          before the next request. Execution, V3 attestation, broker authorization, one-use lease
-          consumption, selected work, receipts, archives, and provider attestation remain unproved.
+          administrator-provisioned Linux/x86_64 VPS. The normal scenario proves Core's private
+          process posture was admitted before terminal scope removal. The crash-recovery scenario
+          proves one root-armed post-scope crash and cleanup before the next request. CLI dispatch,
+          V3 attestation, broker authorization, one-use lease consumption, selected work, receipts,
+          archives, and provider attestation remain unproved.
           EOF
